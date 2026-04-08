@@ -63,9 +63,31 @@ If a dataset has no M grid entry, the script falls back to `[10, 20, 50, 100, 20
 1. **Coarse pass** — evaluates at each M in the grid until both metric thresholds are met.
 2. **Refinement pass** — searches with step 1 between the last failing M and the first passing M to find the exact smallest M.
 
+## LR Search
+
+Once optimal M is found, find the best learning rate for minibatch SVGP:
+
+```bash
+# Uses batch_size from config and LR grid from grids.yaml
+python find_optimal_lr.py --dataset concrete --method train
+
+# Override batch size or Adam steps
+python find_optimal_lr.py --dataset concrete --batch_size 32 --adam_steps 10000
+```
+
+| Argument | Description | Default |
+|---|---|---|
+| `--dataset` | Dataset name | *required* |
+| `--method` | `train` or `greedy` (must match threshold run) | `train` |
+| `--seed` | Random seed | from config (0) |
+| `--batch_size` | Minibatch size for Adam | from config |
+| `--adam_steps` | Number of Adam steps per LR trial | 5000 |
+| `--metric` | Metric to optimise (`rmse`, `nlpd`, `errp`) | `nlpd` (regression) / `errp` (classification) |
+
 ## Output
 
-Results are saved to `optimal_settings/<dataset>_seed<N>_<method>.yaml`.
+- Threshold results: `optimal_settings/<dataset>_seed<N>_<method>.yaml`
+- LR search results: `optimal_settings/<dataset>_seed<N>_<method>_lr.yaml`
 
 ## Citation
 

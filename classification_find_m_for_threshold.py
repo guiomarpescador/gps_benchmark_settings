@@ -6,6 +6,7 @@ import argparse
 import yaml
 import os
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 
 DEFAULT_M_CANDIDATES = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
@@ -51,6 +52,9 @@ def load_classification_data(dataset_name, seed=0, train_fraction=0.8):
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, train_size=train_fraction, random_state=seed
         )
+        x_scaler = StandardScaler().fit(X_train)
+        X_train = x_scaler.transform(X_train)
+        X_test = x_scaler.transform(X_test)
     elif dataset_name == "MNIST":
         (X_train, y_train), (X_test, y_test) = tf.keras.datasets.mnist.load_data()
         X_train = X_train.reshape(-1, 784).astype(np.float64) / 255.0
@@ -166,8 +170,9 @@ def run_svgp(X_train, Y_train, X_test, Y_test, M, num_classes,
         idx = np.random.choice(X_train.shape[0], M, replace=False)
         Z = X_train[idx]
 
+    D = X_train.shape[1]
     kernel = gpflow.kernels.SquaredExponential(
-        lengthscales=DEFAULT_LENGTHSCALE,
+        lengthscales=np.ones(D),
         variance=DEFAULT_VARIANCE,
     )
 
@@ -180,7 +185,7 @@ def run_svgp(X_train, Y_train, X_test, Y_test, M, num_classes,
     )
 
     # Stage 1: Adam
-    adam = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    adam = tf.keras.optimizers.legacy.Adam(learning_rate=learning_rate)
 
     @tf.function
     def adam_step():
@@ -241,14 +246,16 @@ def run_svgp_greedy(X_train, Y_train, X_test, Y_test, M, num_classes,
     if M >= X_train.shape[0]:
         Z = X_train.copy()
     else:
+        D = X_train.shape[1]
         kernel_init = gpflow.kernels.SquaredExponential(
-            lengthscales=DEFAULT_LENGTHSCALE,
+            lengthscales=np.ones(D),
             variance=DEFAULT_VARIANCE,
         )
         Z = select_inducing_points_greedy(X_train, M, kernel_init)
 
+    D = X_train.shape[1]
     kernel = gpflow.kernels.SquaredExponential(
-        lengthscales=DEFAULT_LENGTHSCALE,
+        lengthscales=np.ones(D),
         variance=DEFAULT_VARIANCE,
     )
 
@@ -262,7 +269,7 @@ def run_svgp_greedy(X_train, Y_train, X_test, Y_test, M, num_classes,
     gpflow.set_trainable(model.inducing_variable, False)
 
     # Stage 1: Adam
-    adam = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    adam = tf.keras.optimizers.legacy.Adam(learning_rate=learning_rate)
 
     @tf.function
     def adam_step():

@@ -7,6 +7,7 @@ import yaml
 import os
 from datasets import load_dataset
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 
 DEFAULT_M_CANDIDATES = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
@@ -40,6 +41,12 @@ def load_regression_data(dataset_name, seed=0, train_fraction=0.8):
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, train_size=train_fraction, random_state=seed
     )
+    x_scaler = StandardScaler().fit(X_train)
+    y_scaler = StandardScaler().fit(y_train)
+    X_train = x_scaler.transform(X_train)
+    X_test = x_scaler.transform(X_test)
+    y_train = y_scaler.transform(y_train)
+    y_test = y_scaler.transform(y_test)
     return X_train, y_train, X_test, y_test
 
 def load_grids_config():
@@ -78,7 +85,8 @@ def resolve_m_candidates(dataset_name, n_train, grids_config):
 def run_exact_gpr(X_train, y_train, X_test, y_test):
     print(f"Training Exact GPR on N={X_train.shape[0]} points...")
     
-    kernel = gpflow.kernels.SquaredExponential()
+    D = X_train.shape[1]
+    kernel = gpflow.kernels.SquaredExponential(lengthscales=np.ones(D))
     model = gpflow.models.GPR(data=(X_train, y_train), kernel=kernel, mean_function=None)
     
     opt = gpflow.optimizers.Scipy()
@@ -101,7 +109,8 @@ def run_sgpr(X_train, y_train, X_test, y_test, M):
         indices = np.random.choice(X_train.shape[0], M, replace=False)
         Z = X_train[indices].copy()
         
-    kernel = gpflow.kernels.SquaredExponential()
+    D = X_train.shape[1]
+    kernel = gpflow.kernels.SquaredExponential(lengthscales=np.ones(D))
     model = gpflow.models.SGPR(data=(X_train, y_train), kernel=kernel, inducing_variable=Z)
     
     opt = gpflow.optimizers.Scipy()
@@ -137,10 +146,12 @@ def run_sgpr_greedy(X_train, y_train, X_test, y_test, M):
     if M >= X_train.shape[0]:
         Z = X_train.copy()
     else:
-        kernel_init = gpflow.kernels.SquaredExponential()
+        D = X_train.shape[1]
+        kernel_init = gpflow.kernels.SquaredExponential(lengthscales=np.ones(D))
         Z = select_inducing_points_greedy(X_train, M, kernel_init)
 
-    kernel = gpflow.kernels.SquaredExponential()
+    D = X_train.shape[1]
+    kernel = gpflow.kernels.SquaredExponential(lengthscales=np.ones(D))
     model = gpflow.models.SGPR(data=(X_train, y_train), kernel=kernel, inducing_variable=Z)
     gpflow.set_trainable(model.inducing_variable, False)
 
