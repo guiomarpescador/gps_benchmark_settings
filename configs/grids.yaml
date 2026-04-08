@@ -1,0 +1,31 @@
+M_candidates:
+  concrete: {start: 100, stop: 2000, increment: 50}
+  skillcraft: {start: 100, stop: 2000, increment: 50}
+  kin8nm: {start: 50, stop: 800, increment: 50}
+  naval: {start: 50, stop: 1000, increment: 50}
+  pol: {start: 50, stop: 1000, increment: 50}
+  elevators: {start: 50, stop: 2000, increment: 50}
+  bike: {start: 50, stop: 2000, increment: 50}
+  protein: {start: 100, stop: 5000, increment: 100}
+  kin40k: {start: 100, stop: 5000, increment: 100}
+  keggdirected: {start: 100, stop: 5000, increment: 100}
+  keggundirected: {start: 100, stop: 5000, increment: 100}
+  tamielectric: {start: 100, stop: 5000, increment: 100}
+  diabetes: {start: 50, stop: 500, increment: 50}
+  MNIST: {start: 50, stop: 5000, increment: 50}
+
+LR_candidates:
+  concrete: {start: 0.01, stop: 0.1, increment: 0.01}
+  skillcraft: {start: 0.001, stop: 0.1, increment: 0.01}
+  kin8nm: {start: 0.001, stop: 0.1, increment: 0.01}
+  naval: {start: 0.001, stop: 0.1, increment: 0.01}
+  pol: {start: 0.001, stop: 0.1, increment: 0.01}
+  elevators: {start: 0.0001, stop: 0.01, increment: 0.0005}
+  bike: {start: 0.001, stop: 0.1, increment: 0.01}
+  protein: {start: 0.001, stop: 0.1, increment: 0.01}
+  kin40k: {start: 0.001, stop: 0.1, increment: 0.01}
+  keggdirected: {start: 0.001, stop: 0.1, increment: 0.01}
+  keggundirected: {start: 0.001, stop: 0.1, increment: 0.01}
+  tamielectric: {start: 0.001, stop: 0.1, increment: 0.01}
+  diabetes: {start: 0.001, stop: 0.1, increment: 0.01}
+  MNIST: {start: 0.0001, stop: 0.01, increment: 0.0005}

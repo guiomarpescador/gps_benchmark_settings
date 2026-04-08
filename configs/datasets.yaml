@@ -1,0 +1,48 @@
+regression:
+  - name: bike
+    seed: 0
+    threshold_pct: 5.0
+  - name: concrete
+    seed: 0
+    threshold_pct: 5.0
+  - name: airfoil
+    seed: 0
+    threshold_pct: 5.0
+  - name: elevators
+    seed: 0
+    threshold_pct: 5.0
+  - name: keggdirected
+    seed: 0
+    threshold_pct: 5.0
+  - name: keggundirected
+    seed: 0
+    threshold_pct: 5.0
+  - name: kin8nm
+    seed: 0
+    threshold_pct: 5.0
+  - name: kin40k
+    seed: 0
+    threshold_pct: 5.0
+  - name: naval
+    seed: 0
+    threshold_pct: 5.0
+  - name: pol
+    seed: 0
+    threshold_pct: 5.0
+  - name: protein
+    seed: 0
+    threshold_pct: 5.0
+  - name: skillcraft
+    seed: 0
+    threshold_pct: 5.0
+  - name: tamielectric
+    seed: 0
+    threshold_pct: 5.0
+
+classification:
+  - name: diabetes
+    seed: 0
+    threshold_pct: 5.0
+  - name: MNIST
+    seed: 0
+    threshold_pct: 5.0
