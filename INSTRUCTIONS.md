@@ -5,8 +5,10 @@
 ```bash
 conda create -n gpsenv python=3.10 -y
 conda activate gpsenv
-pip install -r requirements.txt
-pip install datasets
+# Apple Silicon / macOS
+pip install -e ".[macos]"
+# Linux
+pip install -e ".[linux]"
 ```
 
 ## 1. Finding Optimal M
