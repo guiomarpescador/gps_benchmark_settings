@@ -16,7 +16,7 @@ For each dataset, the scripts compare a sparse model against a full (exact) refe
 - **Regression**: SGPR vs Exact GPR — metrics are RMSE and NLPD.
 - **Classification**: sparse SVGP (M < N) vs full SVGP (M = N) — metrics are ERRP and NLPD.
 
-A *trivial baseline* (predicting the training mean/majority class) anchors the scale. The threshold for each metric is defined as:
+A *noise model baseline* (predicting the training mean for regression, or the majority class for classification) represents the worst-case reference — a model that has learned nothing. The threshold for each metric is defined as a percentage of the gap between this baseline and the full model:
 
 $$M_\text{threshold} = \text{Exact} + \frac{p}{100} \times |\text{Trivial} - \text{Exact}|$$
 
