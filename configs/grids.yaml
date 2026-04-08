@@ -15,17 +15,9 @@ M_candidates:
   MNIST: {start: 50, stop: 5000, increment: 50}
 
 LR_candidates:
-  concrete: {start: 0.05, stop: 0.1, increment: 0.005}
-  skillcraft: {start: 0.001, stop: 0.01, increment: 0.01}
-  kin8nm: {start: 0.001, stop: 0.01, increment: 0.01}
-  naval: {start: 0.001, stop: 0.01, increment: 0.01}
-  pol: {start: 0.001, stop: 0.01, increment: 0.01}
-  elevators: {start: 0.0001, stop: 0.01, increment: 0.0005}
-  bike: {start: 0.001, stop: 0.01, increment: 0.01}
-  protein: {start: 0.001, stop: 0.01, increment: 0.01}
-  kin40k: {start: 0.001, stop: 0.01, increment: 0.01}
-  keggdirected: {start: 0.001, stop: 0.01, increment: 0.01}
-  keggundirected: {start: 0.001, stop: 0.01, increment: 0.01}
-  tamielectric: {start: 0.001, stop: 0.01, increment: 0.01}
-  diabetes: {start: 0.001, stop: 0.01, increment: 0.01}
-  MNIST: {start: 0.0001, stop: 0.01, increment: 0.0005}
+  concrete: {start: 0.001, stop: 0.01, increment: 0.001}
+  airfoil: {start: 0.001, stop: 0.01, increment: 0.001}
+  elevators: {start: 0.001, stop: 0.01, increment: 0.001}
+  protein: {start: 0.001, stop: 0.01, increment: 0.001}
+  diabetes: {start: 0.001, stop: 0.01, increment: 0.001}
+  MNIST: {start: 0.0001, stop: 0.01, increment: 0.001}

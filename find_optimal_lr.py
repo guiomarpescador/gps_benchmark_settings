@@ -5,7 +5,7 @@ import argparse
 import yaml
 import os
 from datasets import load_dataset
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 
@@ -99,6 +99,24 @@ def load_regression_data(dataset_name, seed=0, train_fraction=0.8):
     return X_train, y_train, X_test, y_test
 
 
+def load_regression_folds(dataset_name, seed=0, n_folds=5):
+    ds = load_dataset(HF_REPO, dataset_name, split="train")
+    X = np.array(ds["features"], dtype=np.float64)
+    y = np.array(ds["target"], dtype=np.float64)
+    if y.ndim == 1:
+        y = y[:, None]
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    folds = []
+    for train_idx, test_idx in kf.split(X):
+        X_tr, X_te = X[train_idx], X[test_idx]
+        y_tr, y_te = y[train_idx], y[test_idx]
+        x_scaler = StandardScaler().fit(X_tr)
+        y_scaler = StandardScaler().fit(y_tr)
+        folds.append((x_scaler.transform(X_tr), y_scaler.transform(y_tr),
+                      x_scaler.transform(X_te), y_scaler.transform(y_te)))
+    return folds
+
+
 def load_classification_data(dataset_name, seed=0, train_fraction=0.8):
     data_path = os.path.join(os.path.dirname(__file__), 'data')
     if dataset_name == "diabetes":
@@ -120,6 +138,31 @@ def load_classification_data(dataset_name, seed=0, train_fraction=0.8):
     else:
         raise ValueError(f"Unknown classification dataset: {dataset_name}")
     return X_train, y_train, X_test, y_test
+
+
+def load_classification_folds(dataset_name, seed=0, n_folds=5):
+    data_path = os.path.join(os.path.dirname(__file__), 'data')
+    if dataset_name == "diabetes":
+        df = pd.read_csv(os.path.join(data_path, "diabetes.csv"))
+        X = df.iloc[:, :-1].to_numpy(dtype=np.float64)
+        y = df["Outcome"].to_numpy(dtype=np.float64).reshape(-1, 1)
+    elif dataset_name == "MNIST":
+        (X_tr, y_tr), (X_te, y_te) = tf.keras.datasets.mnist.load_data()
+        X = np.concatenate([X_tr.reshape(-1, 784), X_te.reshape(-1, 784)]).astype(np.float64) / 255.0
+        y = np.concatenate([y_tr, y_te]).reshape(-1, 1).astype(np.float64)
+    else:
+        raise ValueError(f"Unknown classification dataset: {dataset_name}")
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    folds = []
+    for train_idx, test_idx in kf.split(X):
+        X_tr, X_te = X[train_idx], X[test_idx]
+        y_tr, y_te = y[train_idx], y[test_idx]
+        if dataset_name != "MNIST":
+            x_scaler = StandardScaler().fit(X_tr)
+            X_tr = x_scaler.transform(X_tr)
+            X_te = x_scaler.transform(X_te)
+        folds.append((X_tr, y_tr, X_te, y_te))
+    return folds
 
 
 # -------------------------
@@ -215,6 +258,8 @@ def main():
     parser.add_argument('--method', type=str, default='train',
                         choices=['train', 'greedy'])
     parser.add_argument('--seed', type=int, default=None)
+    parser.add_argument('--n_folds', type=int, default=None,
+                        help='Number of CV folds (overrides config; omit or 1 for single split)')
     parser.add_argument('--batch_size', type=int, default=None,
                         help='Minibatch size (overrides config)')
     parser.add_argument('--epochs', type=int, default=DEFAULT_EPOCHS,
@@ -238,41 +283,64 @@ def main():
             f"No batch_size configured for {args.dataset} in datasets.yaml "
             f"and --batch_size not provided."
         )
+    n_folds = args.n_folds if args.n_folds is not None else entry.get('n_folds')
+    if not isinstance(n_folds, int) or n_folds < 2:
+        n_folds = None
 
     np.random.seed(seed)
     tf.random.set_seed(seed)
 
     M = load_optimal_m(args.dataset, seed, args.method)
-    print(f"Dataset: {args.dataset}, task: {task}, seed: {seed}")
+    print(f"Dataset: {args.dataset}, task: {task}, seed: {seed}, n_folds: {n_folds or 1}")
     print(f"Optimal M: {M}, batch_size: {batch_size}")
 
     # Load data
     if task == 'regression':
-        X_train, y_train, X_test, y_test = load_regression_data(args.dataset, seed=seed)
+        if n_folds is not None:
+            folds = load_regression_folds(args.dataset, seed=seed, n_folds=n_folds)
+        else:
+            folds = [load_regression_data(args.dataset, seed=seed)]
         num_classes = None
         default_metric = 'nlpd'
     else:
-        X_train, y_train, X_test, y_test = load_classification_data(args.dataset, seed=seed)
-        num_classes = len(np.unique(np.concatenate([y_train, y_test])))
+        if n_folds is not None:
+            folds = load_classification_folds(args.dataset, seed=seed, n_folds=n_folds)
+        else:
+            folds = [load_classification_data(args.dataset, seed=seed)]
+        first_y = np.concatenate([folds[0][1], folds[0][3]])
+        num_classes = len(np.unique(first_y))
         default_metric = 'errp'
 
     metric = args.metric or default_metric
-    print(f"Train N={X_train.shape[0]}, Test N={X_test.shape[0]}, metric={metric}")
+    print(f"Folds: {len(folds)}, metric: {metric}")
 
-    # Sweep LR
+    # Sweep LR (average metrics across folds)
     lr_candidates = resolve_lr_candidates(args.dataset, grids_config)
     all_results = []
 
     for lr in lr_candidates:
         print(f"\n--- LR={lr} ---")
-        np.random.seed(seed)
-        tf.random.set_seed(seed)
+        fold_metrics = []
+        for fold_idx, (X_train, y_train, X_test, y_test) in enumerate(folds):
+            np.random.seed(seed + fold_idx)
+            tf.random.set_seed(seed + fold_idx)
 
-        model = make_svgp(X_train, M, task, num_classes or 2)
-        train_svgp_minibatch(model, X_train, y_train, batch_size, lr, args.epochs)
-        metrics = evaluate_model(model, X_test, y_test, task, num_classes or 2)
-        print(f"  Result: {metrics}")
-        all_results.append({'lr': lr, **metrics})
+            if len(folds) > 1:
+                print(f"  Fold {fold_idx+1}/{len(folds)}")
+
+            model = make_svgp(X_train, M, task, num_classes or 2)
+            train_svgp_minibatch(model, X_train, y_train, batch_size, lr, args.epochs)
+            metrics = evaluate_model(model, X_test, y_test, task, num_classes or 2)
+            print(f"  Result: {metrics}")
+            fold_metrics.append(metrics)
+
+        # Average metrics across folds
+        avg_metrics = {}
+        for key in fold_metrics[0]:
+            avg_metrics[key] = float(np.mean([m[key] for m in fold_metrics]))
+        if len(folds) > 1:
+            print(f"  Avg across {len(folds)} folds: {avg_metrics}")
+        all_results.append({'lr': lr, **avg_metrics})
 
     # Find best
     best = min(all_results, key=lambda r: r[metric])
@@ -283,6 +351,7 @@ def main():
         'dataset': args.dataset,
         'task': task,
         'seed': seed,
+        'n_folds': n_folds or 1,
         'method': args.method,
         'optimal_m': M,
         'batch_size': batch_size,

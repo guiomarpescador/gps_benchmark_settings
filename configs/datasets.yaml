@@ -4,79 +4,79 @@ regression:
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: concrete
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: airfoil
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: elevators
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: keggdirected
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: keggundirected
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: kin8nm
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: kin40k
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: naval
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: pol
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: protein
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: skillcraft
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: tamielectric
     seed: 0
     threshold_pct_rmse: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
 
 classification:
   - name: diabetes
@@ -84,10 +84,10 @@ classification:
     threshold_pct_errp: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5
   - name: MNIST
     seed: 0
     threshold_pct_errp: 5.0
     threshold_pct_nlpd: 10.0
     batch_size: 5
-    n_folds: None
+    n_folds: 5

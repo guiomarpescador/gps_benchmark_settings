@@ -5,7 +5,7 @@ import gpflow
 import argparse
 import yaml
 import os
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
 from sklearn.preprocessing import StandardScaler
 
 
@@ -68,6 +68,47 @@ def load_classification_data(dataset_name, seed=0, train_fraction=0.8):
         )
 
     return X_train, y_train, X_test, y_test
+
+
+def load_classification_folds(dataset_name, seed=0, n_folds=5):
+    data_path = os.path.join(os.path.dirname(__file__), 'data')
+
+    if dataset_name == "diabetes":
+        df = pd.read_csv(os.path.join(data_path, "diabetes.csv"))
+        X = df[
+            [
+                "Pregnancies",
+                "Glucose",
+                "BloodPressure",
+                "SkinThickness",
+                "Insulin",
+                "BMI",
+                "DiabetesPedigreeFunction",
+                "Age",
+            ]
+        ].to_numpy(dtype=np.float64)
+        y = df["Outcome"].to_numpy(dtype=np.float64).reshape(-1, 1)
+    elif dataset_name == "MNIST":
+        (X_tr, y_tr), (X_te, y_te) = tf.keras.datasets.mnist.load_data()
+        X = np.concatenate([X_tr.reshape(-1, 784), X_te.reshape(-1, 784)]).astype(np.float64) / 255.0
+        y = np.concatenate([y_tr, y_te]).reshape(-1, 1).astype(np.float64)
+    else:
+        raise ValueError(
+            f"Unknown classification dataset: {dataset_name}. "
+            "Supported: diabetes, MNIST"
+        )
+
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    folds = []
+    for train_idx, test_idx in kf.split(X):
+        X_tr, X_te = X[train_idx], X[test_idx]
+        y_tr, y_te = y[train_idx], y[test_idx]
+        if dataset_name != "MNIST":
+            x_scaler = StandardScaler().fit(X_tr)
+            X_tr = x_scaler.transform(X_tr)
+            X_te = x_scaler.transform(X_te)
+        folds.append((X_tr, y_tr, X_te, y_te))
+    return folds
 
 
 def get_num_classes(y):
@@ -298,76 +339,32 @@ def run_svgp_greedy(X_train, Y_train, X_test, Y_test, M, num_classes,
 # -------------------------
 # Main
 # -------------------------
-def main():
-    parser = argparse.ArgumentParser(
-        description='Find M for SVGP classification based on ERRP/NLPD threshold.'
-    )
-    parser.add_argument('--dataset', type=str, required=True, help='Dataset name')
-    parser.add_argument('--threshold_pct_errp', type=float, default=None,
-                        help='ERRP percentage threshold (overrides config)')
-    parser.add_argument('--threshold_pct_nlpd', type=float, default=None,
-                        help='NLPD percentage threshold (overrides config)')
-    parser.add_argument('--seed', type=int, default=None,
-                        help='Random seed (overrides config)')
-    parser.add_argument('--method', type=str, default='train',
-                        choices=['train', 'greedy'],
-                        help='train: optimise Z | greedy: freeze Z from conditional variance')
-    args = parser.parse_args()
-
-    datasets_config = load_datasets_config()
-    grids_config = load_grids_config()
-    defaults = get_dataset_defaults(args.dataset, datasets_config)
-
-    seed = args.seed if args.seed is not None else defaults.get('seed', 0)
-    threshold_pct_errp = (args.threshold_pct_errp if args.threshold_pct_errp is not None
-                          else defaults.get('threshold_pct_errp', 5.0))
-    threshold_pct_nlpd = (args.threshold_pct_nlpd if args.threshold_pct_nlpd is not None
-                          else defaults.get('threshold_pct_nlpd', 10.0))
-
-    np.random.seed(seed)
-    tf.random.set_seed(seed)
-
-    print(f"Using seed={seed}, threshold_pct_errp={threshold_pct_errp}, "
-          f"threshold_pct_nlpd={threshold_pct_nlpd}, method={args.method}")
-
-    X_train, y_train, X_test, y_test = load_classification_data(
-        args.dataset, seed=seed
-    )
-    num_classes = get_num_classes(np.concatenate([y_train, y_test]))
+def run_fold_classification(X_train, y_train, X_test, y_test, dataset_name, method,
+                            threshold_pct_errp, threshold_pct_nlpd, grids_config, num_classes):
     N = X_train.shape[0]
 
-    print(f"Data loaded. Train N={N}, Test N={X_test.shape[0]}, "
-          f"num_classes={num_classes}")
-
-    # 1. Trivial baseline
+    # Trivial baseline
     errp_trivial, nlpd_trivial = calculate_trivial_metrics(
         y_train, y_test, num_classes
     )
     print(f"Trivial ERRP: {errp_trivial:.4f}, NLPD: {nlpd_trivial:.4f}")
 
-    # 2. Full SVGP (M = N) as "exact" reference
-    try:
-        errp_full, nlpd_full = run_svgp(
-            X_train, y_train, X_test, y_test, N, num_classes
-        )
-        print(f"Full SVGP ERRP: {errp_full:.4f}, NLPD: {nlpd_full:.4f}")
-    except Exception as e:
-        print(f"Full SVGP failed (likely OOM): {e}")
-        return
+    # Full SVGP (M = N) as "exact" reference
+    errp_full, nlpd_full = run_svgp(
+        X_train, y_train, X_test, y_test, N, num_classes
+    )
+    print(f"Full SVGP ERRP: {errp_full:.4f}, NLPD: {nlpd_full:.4f}")
 
-    # 3. Thresholds
+    # Thresholds
     errp_threshold = errp_full + (threshold_pct_errp / 100.0) * abs(errp_trivial - errp_full)
     nlpd_threshold = nlpd_full + (threshold_pct_nlpd / 100.0) * abs(nlpd_trivial - nlpd_full)
-
     print(f"ERRP Threshold ({threshold_pct_errp}%): {errp_threshold:.4f}")
     print(f"NLPD Threshold ({threshold_pct_nlpd}%): {nlpd_threshold:.4f}")
 
-    # 4. Tune M
+    # Tune M
     print("\nTuning M for SVGP...")
-
-    m_candidates = resolve_m_candidates(args.dataset, N, grids_config)
-
-    run_fn = run_svgp_greedy if args.method == 'greedy' else run_svgp
+    m_candidates = resolve_m_candidates(dataset_name, N, grids_config)
+    run_fn = run_svgp_greedy if method == 'greedy' else run_svgp
 
     found_m_errp = None
     found_m_nlpd = None
@@ -378,20 +375,17 @@ def main():
             X_train, y_train, X_test, y_test, M, num_classes
         )
         print(f"M={M}: ERRP={errp:.4f}, NLPD={nlpd:.4f}")
-
         if found_m_errp is None and errp <= errp_threshold:
             found_m_errp = M
             print(f"   -> ERRP threshold met at M={M}")
-
         if found_m_nlpd is None and nlpd <= nlpd_threshold:
             found_m_nlpd = M
             print(f"   -> NLPD threshold met at M={M}")
-
         if found_m_errp is not None and found_m_nlpd is not None:
             break
         prev_m = M
 
-    # 5. Refinement search
+    # Refinement
     coarse_m = max(found_m_errp or 0, found_m_nlpd or 0)
     lo = prev_m + 1 if prev_m is not None and prev_m < coarse_m else 1
     if coarse_m > lo:
@@ -416,23 +410,101 @@ def main():
         if found_m_nlpd_r is not None:
             found_m_nlpd = found_m_nlpd_r
 
-    # 6. Save results
+    return {
+        'n_train': int(N),
+        'n_test': int(X_test.shape[0]),
+        'num_classes': num_classes,
+        'trivial': {'errp': float(errp_trivial), 'nlpd': float(nlpd_trivial)},
+        'full_svgp': {'errp': float(errp_full), 'nlpd': float(nlpd_full)},
+        'thresholds': {'errp': float(errp_threshold), 'nlpd': float(nlpd_threshold)},
+        'optimal_m': {'errp': found_m_errp, 'nlpd': found_m_nlpd},
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Find M for SVGP classification based on ERRP/NLPD threshold.'
+    )
+    parser.add_argument('--dataset', type=str, required=True, help='Dataset name')
+    parser.add_argument('--threshold_pct_errp', type=float, default=None,
+                        help='ERRP percentage threshold (overrides config)')
+    parser.add_argument('--threshold_pct_nlpd', type=float, default=None,
+                        help='NLPD percentage threshold (overrides config)')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='Random seed (overrides config)')
+    parser.add_argument('--n_folds', type=int, default=None,
+                        help='Number of CV folds (overrides config; omit or 1 for single split)')
+    parser.add_argument('--method', type=str, default='train',
+                        choices=['train', 'greedy'],
+                        help='train: optimise Z | greedy: freeze Z from conditional variance')
+    args = parser.parse_args()
+
+    datasets_config = load_datasets_config()
+    grids_config = load_grids_config()
+    defaults = get_dataset_defaults(args.dataset, datasets_config)
+
+    seed = args.seed if args.seed is not None else defaults.get('seed', 0)
+    threshold_pct_errp = (args.threshold_pct_errp if args.threshold_pct_errp is not None
+                          else defaults.get('threshold_pct_errp', 5.0))
+    threshold_pct_nlpd = (args.threshold_pct_nlpd if args.threshold_pct_nlpd is not None
+                          else defaults.get('threshold_pct_nlpd', 10.0))
+    n_folds = args.n_folds if args.n_folds is not None else defaults.get('n_folds')
+    if not isinstance(n_folds, int) or n_folds < 2:
+        n_folds = None
+
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+
+    print(f"Using seed={seed}, threshold_pct_errp={threshold_pct_errp}, "
+          f"threshold_pct_nlpd={threshold_pct_nlpd}, method={args.method}, "
+          f"n_folds={n_folds or 1}")
+
+    # Load data
+    if n_folds is not None:
+        folds = load_classification_folds(args.dataset, seed=seed, n_folds=n_folds)
+    else:
+        folds = [load_classification_data(args.dataset, seed=seed)]
+
+    # Determine num_classes from first fold
+    first_y = np.concatenate([folds[0][1], folds[0][3]])
+    num_classes = get_num_classes(first_y)
+
+    fold_results = []
+    for fold_idx, (X_train, y_train, X_test, y_test) in enumerate(folds):
+        print(f"\n{'='*50} Fold {fold_idx+1}/{len(folds)} {'='*50}")
+        print(f"Train N={X_train.shape[0]}, Test N={X_test.shape[0]}, "
+              f"num_classes={num_classes}")
+        try:
+            result = run_fold_classification(
+                X_train, y_train, X_test, y_test,
+                args.dataset, args.method,
+                threshold_pct_errp, threshold_pct_nlpd, grids_config, num_classes
+            )
+            fold_results.append(result)
+        except Exception as e:
+            print(f"Fold {fold_idx+1} failed: {e}")
+
+    if not fold_results:
+        print("All folds failed.")
+        return
+
+    # Aggregate: max M across folds (conservative)
+    all_m_errp = [r['optimal_m']['errp'] for r in fold_results if r['optimal_m']['errp'] is not None]
+    all_m_nlpd = [r['optimal_m']['nlpd'] for r in fold_results if r['optimal_m']['nlpd'] is not None]
+    final_m_errp = max(all_m_errp) if all_m_errp else None
+    final_m_nlpd = max(all_m_nlpd) if all_m_nlpd else None
+
+    # Save results
     results = {
         'dataset': args.dataset,
         'seed': seed,
+        'n_folds': n_folds or 1,
         'threshold_pct_errp': threshold_pct_errp,
         'threshold_pct_nlpd': threshold_pct_nlpd,
         'method': args.method,
         'num_classes': num_classes,
-        'n_train': int(N),
-        'n_test': int(X_test.shape[0]),
-        'trivial': {'errp': float(errp_trivial), 'nlpd': float(nlpd_trivial)},
-        'full_svgp': {'errp': float(errp_full), 'nlpd': float(nlpd_full)},
-        'thresholds': {'errp': float(errp_threshold), 'nlpd': float(nlpd_threshold)},
-        'optimal_m': {
-            'errp': found_m_errp,
-            'nlpd': found_m_nlpd,
-        },
+        'optimal_m': {'errp': final_m_errp, 'nlpd': final_m_nlpd},
+        'per_fold': fold_results,
     }
 
     out_dir = os.path.join(os.path.dirname(__file__), 'optimal_settings')
@@ -441,13 +513,13 @@ def main():
     with open(out_path, 'w') as f:
         yaml.dump(results, f, default_flow_style=False, sort_keys=False)
 
-    print("\nResults:")
-    if found_m_errp:
-        print(f"Smallest M for ERRP threshold: {found_m_errp}")
+    print(f"\n{'='*50} Summary {'='*50}")
+    if final_m_errp:
+        print(f"Optimal M for ERRP (max across {n_folds or 1} fold(s)): {final_m_errp}")
     else:
         print("Could not find M for ERRP threshold.")
-    if found_m_nlpd:
-        print(f"Smallest M for NLPD threshold: {found_m_nlpd}")
+    if final_m_nlpd:
+        print(f"Optimal M for NLPD (max across {n_folds or 1} fold(s)): {final_m_nlpd}")
     else:
         print("Could not find M for NLPD threshold.")
     print(f"Saved to {out_path}")
