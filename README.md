@@ -1,4 +1,4 @@
-# GPS Benchmark Settings
+# Gaussian Processes Benchmark Settings
 
 Find the smallest number of inducing points **M** that stays within a given percentage of the full-model performance.
 
@@ -17,11 +17,11 @@ pip install datasets
 ## Regression
 
 ```bash
-# Default: uses seed and threshold_pct from configs/datasets.yaml
+# Default: uses seed and thresholds from configs/datasets.yaml
 python regression_find_m_for_threshold.py --dataset concrete
 
-# Override threshold and seed
-python regression_find_m_for_threshold.py --dataset bike --threshold_pct 2.5 --seed 42
+# Override thresholds and seed
+python regression_find_m_for_threshold.py --dataset bike --threshold_pct_rmse 2.5 --threshold_pct_nlpd 5.0 --seed 42
 
 # Greedy inducing point selection (frozen Z, no optimisation of locations)
 python regression_find_m_for_threshold.py --dataset concrete --method greedy
@@ -40,20 +40,33 @@ python classification_find_m_for_threshold.py --dataset MNIST
 python classification_find_m_for_threshold.py --dataset diabetes --method greedy
 ```
 
-### Arguments (both scripts)
+### Arguments
+
+**Regression:**
 
 | Argument | Description | Default |
 |---|---|---|
 | `--dataset` | Dataset name | *required* |
-| `--threshold_pct` | Allowed degradation as % of the trivial–full gap | from config (5.0) |
+| `--threshold_pct_rmse` | Allowed RMSE degradation as % of the trivial–full gap | from config (5.0) |
+| `--threshold_pct_nlpd` | Allowed NLPD degradation as % of the trivial–full gap | from config (10.0) |
 | `--seed` | Random seed for train/test split | from config (0) |
 | `--method` | `train` (optimise Z) or `greedy` (conditional variance, frozen Z) | `train` |
 
-If `--seed` or `--threshold_pct` are omitted, values are read from `configs/datasets.yaml`.
+**Classification:**
+
+| Argument | Description | Default |
+|---|---|---|
+| `--dataset` | Dataset name | *required* |
+| `--threshold_pct_errp` | Allowed ERRP degradation as % of the trivial–full gap | from config (5.0) |
+| `--threshold_pct_nlpd` | Allowed NLPD degradation as % of the trivial–full gap | from config (10.0) |
+| `--seed` | Random seed for train/test split | from config (0) |
+| `--method` | `train` (optimise Z) or `greedy` (conditional variance, frozen Z) | `train` |
+
+If `--seed` or threshold arguments are omitted, values are read from `configs/datasets.yaml`.
 
 ## Config Files
 
-- **`configs/datasets.yaml`** — lists each dataset with its default `seed` and `threshold_pct`.
+- **`configs/datasets.yaml`** — lists each dataset with its default `seed` and per-metric thresholds (`threshold_pct_rmse`/`threshold_pct_nlpd` for regression, `threshold_pct_errp`/`threshold_pct_nlpd` for classification).
 - **`configs/grids.yaml`** — integer M candidate grids (`start`/`stop`/`increment`) and LR candidate grids per dataset.
 
 If a dataset has no M grid entry, the script falls back to `[10, 20, 50, 100, 200, 500, 1000, 2000, 5000]`.

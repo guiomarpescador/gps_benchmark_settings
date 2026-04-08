@@ -167,7 +167,8 @@ def run_sgpr_greedy(X_train, y_train, X_test, y_test, M):
 def main():
     parser = argparse.ArgumentParser(description='Find M for SGPR based on RMSE threshold.')
     parser.add_argument('--dataset', type=str, required=True, help='Dataset name')
-    parser.add_argument('--threshold_pct', type=float, default=None, help='Percentage threshold (overrides config)')
+    parser.add_argument('--threshold_pct_rmse', type=float, default=None, help='RMSE threshold pct (overrides config)')
+    parser.add_argument('--threshold_pct_nlpd', type=float, default=None, help='NLPD threshold pct (overrides config)')
     parser.add_argument('--seed', type=int, default=None, help='Random seed (overrides config)')
     parser.add_argument('--method', type=str, default='train', choices=['train', 'greedy'],
                         help='train: optimise Z locations | greedy: freeze Z from conditional variance')
@@ -179,12 +180,13 @@ def main():
     defaults = get_dataset_defaults(args.dataset, datasets_config)
 
     seed = args.seed if args.seed is not None else defaults.get('seed', 0)
-    threshold_pct = args.threshold_pct if args.threshold_pct is not None else defaults.get('threshold_pct', 5.0)
+    threshold_pct_rmse = args.threshold_pct_rmse if args.threshold_pct_rmse is not None else defaults.get('threshold_pct_rmse', 5.0)
+    threshold_pct_nlpd = args.threshold_pct_nlpd if args.threshold_pct_nlpd is not None else defaults.get('threshold_pct_nlpd', 10.0)
 
     np.random.seed(seed)
     tf.random.set_seed(seed)
 
-    print(f"Using seed={seed}, threshold_pct={threshold_pct}, method={args.method}")
+    print(f"Using seed={seed}, threshold_pct_rmse={threshold_pct_rmse}, threshold_pct_nlpd={threshold_pct_nlpd}, method={args.method}")
     X_train, y_train, X_test, y_test = load_regression_data(args.dataset, seed=seed)
     print(f"Data loaded. Train N={X_train.shape[0]}, Test N={X_test.shape[0]}")
 
@@ -207,11 +209,11 @@ def main():
 
     # 3. Calculate Threshold
     # Threshold = Exact + pct * |Trivial - Exact|
-    rmse_threshold = rmse_exact + (threshold_pct / 100.0) * np.abs(rmse_trivial - rmse_exact)
-    nlpd_threshold = nlpd_exact + (threshold_pct / 100.0) * np.abs(nlpd_trivial - nlpd_exact)
+    rmse_threshold = rmse_exact + (threshold_pct_rmse / 100.0) * np.abs(rmse_trivial - rmse_exact)
+    nlpd_threshold = nlpd_exact + (threshold_pct_nlpd / 100.0) * np.abs(nlpd_trivial - nlpd_exact)
     
-    print(f"RMSE Threshold ({threshold_pct}%): {rmse_threshold:.4f}")
-    print(f"NLPD Threshold ({threshold_pct}%): {nlpd_threshold:.4f}")
+    print(f"RMSE Threshold ({threshold_pct_rmse}%): {rmse_threshold:.4f}")
+    print(f"NLPD Threshold ({threshold_pct_nlpd}%): {nlpd_threshold:.4f}")
     
     # 4. Tune M for SGPR
     print("\nTuning M for SGPR...")
@@ -268,7 +270,8 @@ def main():
     results = {
         'dataset': args.dataset,
         'seed': seed,
-        'threshold_pct': threshold_pct,
+        'threshold_pct_rmse': threshold_pct_rmse,
+        'threshold_pct_nlpd': threshold_pct_nlpd,
         'method': args.method,
         'n_train': int(X_train.shape[0]),
         'n_test': int(X_test.shape[0]),

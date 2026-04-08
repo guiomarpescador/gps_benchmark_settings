@@ -303,8 +303,10 @@ def main():
         description='Find M for SVGP classification based on ERRP/NLPD threshold.'
     )
     parser.add_argument('--dataset', type=str, required=True, help='Dataset name')
-    parser.add_argument('--threshold_pct', type=float, default=None,
-                        help='Percentage threshold (overrides config)')
+    parser.add_argument('--threshold_pct_errp', type=float, default=None,
+                        help='ERRP percentage threshold (overrides config)')
+    parser.add_argument('--threshold_pct_nlpd', type=float, default=None,
+                        help='NLPD percentage threshold (overrides config)')
     parser.add_argument('--seed', type=int, default=None,
                         help='Random seed (overrides config)')
     parser.add_argument('--method', type=str, default='train',
@@ -317,13 +319,16 @@ def main():
     defaults = get_dataset_defaults(args.dataset, datasets_config)
 
     seed = args.seed if args.seed is not None else defaults.get('seed', 0)
-    threshold_pct = (args.threshold_pct if args.threshold_pct is not None
-                     else defaults.get('threshold_pct', 5.0))
+    threshold_pct_errp = (args.threshold_pct_errp if args.threshold_pct_errp is not None
+                          else defaults.get('threshold_pct_errp', 5.0))
+    threshold_pct_nlpd = (args.threshold_pct_nlpd if args.threshold_pct_nlpd is not None
+                          else defaults.get('threshold_pct_nlpd', 10.0))
 
     np.random.seed(seed)
     tf.random.set_seed(seed)
 
-    print(f"Using seed={seed}, threshold_pct={threshold_pct}, method={args.method}")
+    print(f"Using seed={seed}, threshold_pct_errp={threshold_pct_errp}, "
+          f"threshold_pct_nlpd={threshold_pct_nlpd}, method={args.method}")
 
     X_train, y_train, X_test, y_test = load_classification_data(
         args.dataset, seed=seed
@@ -351,11 +356,11 @@ def main():
         return
 
     # 3. Thresholds
-    errp_threshold = errp_full + (threshold_pct / 100.0) * abs(errp_trivial - errp_full)
-    nlpd_threshold = nlpd_full + (threshold_pct / 100.0) * abs(nlpd_trivial - nlpd_full)
+    errp_threshold = errp_full + (threshold_pct_errp / 100.0) * abs(errp_trivial - errp_full)
+    nlpd_threshold = nlpd_full + (threshold_pct_nlpd / 100.0) * abs(nlpd_trivial - nlpd_full)
 
-    print(f"ERRP Threshold ({threshold_pct}%): {errp_threshold:.4f}")
-    print(f"NLPD Threshold ({threshold_pct}%): {nlpd_threshold:.4f}")
+    print(f"ERRP Threshold ({threshold_pct_errp}%): {errp_threshold:.4f}")
+    print(f"NLPD Threshold ({threshold_pct_nlpd}%): {nlpd_threshold:.4f}")
 
     # 4. Tune M
     print("\nTuning M for SVGP...")
@@ -415,7 +420,8 @@ def main():
     results = {
         'dataset': args.dataset,
         'seed': seed,
-        'threshold_pct': threshold_pct,
+        'threshold_pct_errp': threshold_pct_errp,
+        'threshold_pct_nlpd': threshold_pct_nlpd,
         'method': args.method,
         'num_classes': num_classes,
         'n_train': int(N),
