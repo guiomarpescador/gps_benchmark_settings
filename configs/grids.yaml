@@ -1,10 +1,11 @@
 M_candidates:
-  concrete: {start: 100, stop: 2000, increment: 50}
-  skillcraft: {start: 100, stop: 2000, increment: 50}
+  concrete: {start: 50, stop: 500, increment: 50}
+  airfoil: {start: 50, stop: 1000, increment: 50}
+  skillcraft: {start: 50, stop: 1000, increment: 50}
   kin8nm: {start: 50, stop: 800, increment: 50}
   naval: {start: 50, stop: 1000, increment: 50}
   pol: {start: 50, stop: 1000, increment: 50}
-  elevators: {start: 50, stop: 2000, increment: 50}
+  elevators: {start: 350, stop: 2000, increment: 50}
   bike: {start: 50, stop: 2000, increment: 50}
   protein: {start: 100, stop: 5000, increment: 100}
   kin40k: {start: 100, stop: 5000, increment: 100}
