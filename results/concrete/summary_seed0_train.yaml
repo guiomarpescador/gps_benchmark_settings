@@ -1,0 +1,25 @@
+dataset: concrete
+task: regression
+seed: 0
+n_folds: 5
+method: train
+noise_model_baseline:
+  rmse: 1.000928
+  nlpd: 1.420779
+full_model_baseline:
+  rmse: 0.294648
+  nlpd: 0.15967
+threshold_settings:
+  threshold_pct_rmse: 5.0
+  threshold_pct_nlpd: 10.0
+thresholds_avg:
+  rmse: 0.329962
+  nlpd: 0.285781
+optimal_m:
+  rmse: 154
+  nlpd: 154
+  recommended: 154
+optimal_lr: 0.002
+best_metrics_at_optimal_lr:
+  rmse: 0.3646524590962412
+  nlpd: 0.3916047214134814
