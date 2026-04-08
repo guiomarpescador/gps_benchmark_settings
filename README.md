@@ -66,3 +66,20 @@ If a dataset has no M grid entry, the script falls back to `[10, 20, 50, 100, 20
 ## Output
 
 Results are saved to `optimal_settings/<dataset>_seed<N>_<method>.yaml`.
+
+## Citation
+
+If you use this code, please cite:
+
+```bibtex
+@software{pescador2025gpsbenchmark,
+  author    = {Pescador-Barrios, Guiomar},
+  title     = {Gaussian Processes Benchmark Settings},
+  year      = {2026},
+  url       = {https://github.com/guiomarpescador/gps_benchmark_settings}
+}
+```
+
+This work builds on ideas from:
+
+> G. Pescador-Barrios, S. Filippi, M. van der Wilk. *Adjusting Model Size in Continual Gaussian Processes: How Big is Big Enough?* ICML 2025. [arXiv:2408.07588](https://arxiv.org/abs/2408.07588)
