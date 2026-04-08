@@ -105,3 +105,42 @@ If a dataset has no M grid entry, the script falls back to `[10, 20, 50, 100, 20
 
 - Threshold results: `optimal_settings/<dataset>_seed<N>_<method>.yaml`
 - LR search results: `optimal_settings/<dataset>_seed<N>_<method>_lr.yaml`
+
+## Full Pipeline
+
+To run everything (M search + LR search) for one or more datasets in one command:
+
+```bash
+# Single dataset
+python run_pipeline.py --datasets concrete
+
+# Multiple datasets
+python run_pipeline.py --datasets concrete bike kin8nm
+
+# All datasets in configs/datasets.yaml
+python run_pipeline.py --all
+
+# Greedy method, skip LR search
+python run_pipeline.py --datasets concrete --method greedy --skip_lr
+```
+
+Results are saved to `results/{dataset}/summary_seed{N}_{method}.yaml` and include:
+
+- `noise_model_baseline` — trivial predictor (training mean / majority class), averaged across folds
+- `full_model_baseline` — exact GPR / full SVGP (M=N), averaged across folds
+- `threshold_settings` — the percentage thresholds used per metric
+- `thresholds_avg` — the actual threshold values, averaged across folds
+- `optimal_m` — smallest M per metric + `recommended` (max across metrics)
+- `optimal_lr` — best learning rate for minibatch SVGP
+- `best_metrics_at_optimal_lr` — fold-averaged metrics at the optimal LR
+
+The LR step is skipped automatically if no LR grid is configured for the dataset in `configs/grids.yaml`.
+
+| Argument | Description | Default |
+|---|---|---|
+| `--datasets` | One or more dataset names | *required (or --all)* |
+| `--all` | Run all datasets in config | — |
+| `--method` | `train` or `greedy` | `train` |
+| `--skip_lr` | Skip the LR search step | off |
+
+---
