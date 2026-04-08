@@ -2,9 +2,9 @@
 
 ## Motivation
 
-Sparse Gaussian Processes approximate the full GP by using a set of **M** inducing points. Choosing M involves a fundamental trade-off:
+Sparse Gaussian Processes approximate the full GP by using a set of **M** inducing points. Choosing M is important: 
 
-- **M too small** — the approximation is poor and predictive accuracy degrades.
+- **M too small** — the approximation is poor and we sacrifice performance.
 - **M too large** — computation is wasted without meaningful improvement.
 
 This repository provides tools to find the **smallest M** that stays within a given percentage of full-model performance, following the methodology of [Pescador-Barrios et al. (2025)](https://arxiv.org/abs/2408.07588).
@@ -20,7 +20,7 @@ A *noise model baseline* (predicting the training mean for regression, or the ma
 
 $$M_\text{threshold} = \text{Exact} + \frac{p}{100} \times |\text{Trivial} - \text{Exact}|$$
 
-where $p$ is the allowed degradation percentage (default: 5% for RMSE/ERRP, 10% for NLPD). The search finds the smallest M where the sparse model meets both thresholds, with 5-fold cross-validation for robustness.
+where $p$ is the threshold percentage (default: 5% for RMSE/ERRP, 10% for NLPD). The search finds the smallest M where the sparse model meets both thresholds. It also works with cross-validation folds, averaging metrics across folds to determine the optimal M (max across folds).
 
 ## Stochastic SVGP — Learning Rate Search
 
