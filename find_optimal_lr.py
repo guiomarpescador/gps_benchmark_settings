@@ -14,6 +14,19 @@ HF_REPO = "OccaMLab/bayesian-benchmarks"
 DEFAULT_EPOCHS = 100
 
 
+def configure_runtime():
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        try:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            print(f"GPU memory growth enabled for {len(gpus)} GPU(s)")
+        except RuntimeError as e:
+            print(f"GPU memory growth setting failed: {e}")
+
+    gpflow.config.set_default_float(np.float64)
+
+
 # -------------------------
 # Config loading
 # -------------------------
@@ -41,7 +54,7 @@ def get_dataset_entry(dataset_name, datasets_config):
     return {}, None
 
 
-def load_optimal_m(dataset_name, seed, method):
+def load_optimal_m_and_thresholds(dataset_name, seed, method):
     path = os.path.join(
         os.path.dirname(__file__), 'optimal_settings',
         f'{dataset_name}_seed{seed}_{method}.yaml'
@@ -59,7 +72,27 @@ def load_optimal_m(dataset_name, seed, method):
     candidates = [m for m in [m_rmse, m_nlpd, m_errp] if m is not None]
     if not candidates:
         raise ValueError(f"No optimal M found in {path}")
-    return max(candidates)
+
+    per_fold = results.get('per_fold', [])
+
+    # Averaged thresholds (used for outer LR sweep stopping)
+    avg_thresholds = {}
+    for metric in ('rmse', 'nlpd', 'errp'):
+        values = [f['thresholds'][metric] for f in per_fold
+                  if metric in f.get('thresholds', {})]
+        if values:
+            avg_thresholds[metric] = float(np.mean(values))
+
+    # Per-fold thresholds (used for epoch-level early stopping within each fold)
+    fold_thresholds = []
+    for f in per_fold:
+        ft = {}
+        for metric in ('rmse', 'nlpd', 'errp'):
+            if metric in f.get('thresholds', {}):
+                ft[metric] = float(f['thresholds'][metric])
+        fold_thresholds.append(ft)
+
+    return max(candidates), avg_thresholds, fold_thresholds
 
 
 def resolve_lr_candidates(dataset_name, grids_config):
@@ -198,7 +231,16 @@ def make_svgp(X_train, M, task, num_classes=2):
     return model
 
 
-def train_svgp_minibatch(model, X_train, y_train, batch_size, lr, epochs):
+def train_svgp_minibatch(model, X_train, y_train, batch_size, lr, epochs,
+                         X_test=None, y_test=None, task=None, num_classes=2,
+                         early_stop_thresholds=None):
+    """
+    Train with optional epoch-level early stopping.
+    If X_test, y_test, task and early_stop_thresholds are provided, evaluates
+    after each epoch and stops as soon as all metrics in early_stop_thresholds
+    are met.
+    Returns the final evaluation metrics dict (or None if eval was not run).
+    """
     N = X_train.shape[0]
     steps_per_epoch = max(1, N // batch_size)
     total_steps = epochs * steps_per_epoch
@@ -216,14 +258,37 @@ def train_svgp_minibatch(model, X_train, y_train, batch_size, lr, epochs):
         adam.apply_gradients(zip(grads, model.trainable_variables))
         return loss
 
+    do_early_stop = (
+        X_test is not None and y_test is not None
+        and task is not None and early_stop_thresholds
+    )
+    last_metrics = None
+
     print(f"  N={N}, batch_size={batch_size}, steps_per_epoch={steps_per_epoch}, total_steps={total_steps}")
+    if do_early_stop:
+        print(f"  Early-stop thresholds: {early_stop_thresholds}")
+
     for i in range(total_steps):
         batch_x, batch_y = next(iterator)
-        loss = step(batch_x, batch_y)
-        if i % steps_per_epoch == 0:
-            epoch = i // steps_per_epoch
+        step(batch_x, batch_y)
+
+        if (i + 1) % steps_per_epoch == 0:
+            epoch = (i + 1) // steps_per_epoch
             elbo = -model.elbo((X_train, y_train)).numpy()
             tf.print(f"  [Adam lr={lr}] epoch {epoch}, ELBO:", -elbo)
+
+            if do_early_stop:
+                last_metrics = evaluate_model(model, X_test, y_test, task, num_classes)
+                met = all(
+                    last_metrics.get(k, float('inf')) <= v
+                    for k, v in early_stop_thresholds.items()
+                )
+                tf.print(f"    metrics:", str(last_metrics))
+                if met:
+                    print(f"  Early stopping at epoch {epoch}: all thresholds met.")
+                    return last_metrics
+
+    return last_metrics
 
 
 def evaluate_model(model, X_test, y_test, task, num_classes=2):
@@ -269,6 +334,8 @@ def main():
                         help='Metric to optimise (default: nlpd for regression, errp for classification)')
     args = parser.parse_args()
 
+    configure_runtime()
+
     datasets_config = load_datasets_config()
     grids_config = load_grids_config()
     entry, task = get_dataset_entry(args.dataset, datasets_config)
@@ -290,9 +357,11 @@ def main():
     np.random.seed(seed)
     tf.random.set_seed(seed)
 
-    M = load_optimal_m(args.dataset, seed, args.method)
+    M, thresholds, fold_thresholds = load_optimal_m_and_thresholds(args.dataset, seed, args.method)
     print(f"Dataset: {args.dataset}, task: {task}, seed: {seed}, n_folds: {n_folds or 1}")
     print(f"Optimal M: {M}, batch_size: {batch_size}")
+    print(f"Avg thresholds (LR sweep): {thresholds}")
+    print(f"Per-fold thresholds (early stop): {fold_thresholds}")
 
     # Load data
     if task == 'regression':
@@ -314,11 +383,13 @@ def main():
     metric = args.metric or default_metric
     print(f"Folds: {len(folds)}, metric: {metric}")
 
-    # Sweep LR (average metrics across folds)
+    # Sweep LR from largest to smallest; stop once thresholds are met
     lr_candidates = resolve_lr_candidates(args.dataset, grids_config)
+    lr_candidates_desc = sorted(lr_candidates, reverse=True)
     all_results = []
+    best = None
 
-    for lr in lr_candidates:
+    for lr in lr_candidates_desc:
         print(f"\n--- LR={lr} ---")
         fold_metrics = []
         for fold_idx, (X_train, y_train, X_test, y_test) in enumerate(folds):
@@ -329,8 +400,18 @@ def main():
                 print(f"  Fold {fold_idx+1}/{len(folds)}")
 
             model = make_svgp(X_train, M, task, num_classes or 2)
-            train_svgp_minibatch(model, X_train, y_train, batch_size, lr, args.epochs)
-            metrics = evaluate_model(model, X_test, y_test, task, num_classes or 2)
+            # Use this fold's own threshold for epoch-level early stopping
+            es_thresh = fold_thresholds[fold_idx] if fold_idx < len(fold_thresholds) else None
+            last_metrics = train_svgp_minibatch(
+                model, X_train, y_train, batch_size, lr, args.epochs,
+                X_test=X_test, y_test=y_test, task=task,
+                num_classes=num_classes or 2,
+                early_stop_thresholds=es_thresh,
+            )
+            # Reuse metrics from the stopping epoch if available
+            metrics = last_metrics if last_metrics is not None else evaluate_model(
+                model, X_test, y_test, task, num_classes or 2
+            )
             print(f"  Result: {metrics}")
             fold_metrics.append(metrics)
 
@@ -342,9 +423,21 @@ def main():
             print(f"  Avg across {len(folds)} folds: {avg_metrics}")
         all_results.append({'lr': lr, **avg_metrics})
 
-    # Find best
-    best = min(all_results, key=lambda r: r[metric])
-    print(f"\nBest LR by {metric}: {best['lr']} -> {best}")
+        # Check if threshold met for the chosen metric
+        if metric in thresholds and avg_metrics[metric] <= thresholds[metric]:
+            best = {'lr': lr, **avg_metrics}
+            print(f"  -> Threshold met at LR={lr} ({metric}={avg_metrics[metric]:.4f} <= {thresholds[metric]:.4f}). Stopping.")
+            break
+        else:
+            threshold_str = f"{thresholds[metric]:.4f}" if metric in thresholds else "N/A"
+            print(f"  -> Threshold NOT met (metric={avg_metrics[metric]:.4f}, threshold={threshold_str})")
+
+    if best is None:
+        # No LR met the threshold; fall back to best metric among all evaluated
+        best = min(all_results, key=lambda r: r[metric])
+        print(f"\nNo LR met threshold. Falling back to best {metric}: LR={best['lr']} -> {best}")
+    else:
+        print(f"\nOptimal LR (largest meeting threshold) by {metric}: {best['lr']} -> {best}")
 
     # Save
     output = {
@@ -357,8 +450,9 @@ def main():
         'batch_size': batch_size,
         'epochs': args.epochs,
         'metric_optimised': metric,
-        'best_lr': best['lr'],
-        'best_metrics': {k: v for k, v in best.items() if k != 'lr'},
+        'thresholds': thresholds,
+        'optimal_lr': best['lr'],
+        'optimal_lr_metrics': {k: v for k, v in best.items() if k != 'lr'},
         'all_results': all_results,
     }
 

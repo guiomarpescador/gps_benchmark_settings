@@ -15,6 +15,19 @@ DEFAULT_M_CANDIDATES = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
 HF_REPO = "OccaMLab/bayesian-benchmarks"
 
 
+def configure_runtime():
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        try:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            print(f"GPU memory growth enabled for {len(gpus)} GPU(s)")
+        except RuntimeError as e:
+            print(f"GPU memory growth setting failed: {e}")
+
+    gpflow.config.set_default_float(np.float64)
+
+
 def load_datasets_config():
     config_path = os.path.join(os.path.dirname(__file__), 'configs', 'datasets.yaml')
     if not os.path.exists(config_path):
@@ -273,6 +286,8 @@ def main():
                         help='train: optimise Z locations | greedy: freeze Z from conditional variance')
 
     args = parser.parse_args()
+
+    configure_runtime()
 
     datasets_config = load_datasets_config()
     grids_config = load_grids_config()

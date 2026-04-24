@@ -14,6 +14,30 @@ DEFAULT_LENGTHSCALE = 1.0
 DEFAULT_VARIANCE = 1.0
 DEFAULT_LEARNING_RATE = 0.01
 ADAM_STEPS = 1000
+OOM_FALLBACK_M = 1000
+
+
+def is_oom_error(exc):
+    message = str(exc).lower()
+    return (
+        isinstance(exc, tf.errors.ResourceExhaustedError)
+        or 'oom' in message
+        or 'out of memory' in message
+        or 'failed copying input tensor' in message
+    )
+
+
+def configure_runtime():
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        try:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            print(f"GPU memory growth enabled for {len(gpus)} GPU(s)")
+        except RuntimeError as e:
+            print(f"GPU memory growth setting failed: {e}")
+
+    gpflow.config.set_default_float(np.float64)
 
 
 def load_datasets_config():
@@ -349,11 +373,31 @@ def run_fold_classification(X_train, y_train, X_test, y_test, dataset_name, meth
     )
     print(f"Trivial ERRP: {errp_trivial:.4f}, NLPD: {nlpd_trivial:.4f}")
 
-    # Full SVGP (M = N) as "exact" reference
-    errp_full, nlpd_full = run_svgp(
-        X_train, y_train, X_test, y_test, N, num_classes
-    )
-    print(f"Full SVGP ERRP: {errp_full:.4f}, NLPD: {nlpd_full:.4f}")
+    # Full SVGP (M = N) as the default reference. If that OOMs, fall back to
+    # a sparse reference with a fixed inducing budget.
+    reference_m = N
+    try:
+        errp_full, nlpd_full = run_svgp(
+            X_train, y_train, X_test, y_test, N, num_classes
+        )
+        print(f"Full SVGP ERRP: {errp_full:.4f}, NLPD: {nlpd_full:.4f}")
+    except Exception as exc:
+        if not is_oom_error(exc):
+            raise
+
+        reference_m = min(OOM_FALLBACK_M, N)
+        print(
+            f"Full SVGP baseline OOM at M={N}; "
+            f"falling back to sparse reference M={reference_m}."
+        )
+        tf.keras.backend.clear_session()
+        errp_full, nlpd_full = run_svgp(
+            X_train, y_train, X_test, y_test, reference_m, num_classes
+        )
+        print(
+            f"Sparse reference SVGP ERRP: {errp_full:.4f}, "
+            f"NLPD: {nlpd_full:.4f}"
+        )
 
     # Thresholds
     errp_threshold = errp_full + (threshold_pct_errp / 100.0) * abs(errp_trivial - errp_full)
@@ -414,6 +458,7 @@ def run_fold_classification(X_train, y_train, X_test, y_test, dataset_name, meth
         'n_train': int(N),
         'n_test': int(X_test.shape[0]),
         'num_classes': num_classes,
+        'reference_m': int(reference_m),
         'trivial': {'errp': float(errp_trivial), 'nlpd': float(nlpd_trivial)},
         'full_svgp': {'errp': float(errp_full), 'nlpd': float(nlpd_full)},
         'thresholds': {'errp': float(errp_threshold), 'nlpd': float(nlpd_threshold)},
@@ -438,6 +483,8 @@ def main():
                         choices=['train', 'greedy'],
                         help='train: optimise Z | greedy: freeze Z from conditional variance')
     args = parser.parse_args()
+
+    configure_runtime()
 
     datasets_config = load_datasets_config()
     grids_config = load_grids_config()

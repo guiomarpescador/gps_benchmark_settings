@@ -94,8 +94,8 @@ def build_summary(threshold_data, lr_data, task):
     }
 
     if lr_data is not None:
-        summary['optimal_lr'] = lr_data.get('best_lr')
-        summary['best_metrics_at_optimal_lr'] = lr_data.get('best_metrics')
+        summary['optimal_lr'] = lr_data.get('optimal_lr') or lr_data.get('best_lr')
+        summary['best_metrics_at_optimal_lr'] = lr_data.get('optimal_lr_metrics') or lr_data.get('best_metrics')
     else:
         summary['optimal_lr'] = None
         summary['best_metrics_at_optimal_lr'] = None
@@ -122,8 +122,18 @@ def run_dataset(dataset_name, task, entry, args):
         'regression_find_m_for_threshold.py' if task == 'regression'
         else 'classification_find_m_for_threshold.py'
     )
-    print(f"\n[1/2] Finding optimal M for '{dataset_name}'...")
-    run_script(threshold_script, common_args)
+    threshold_path_check = os.path.join(
+        script_dir, 'optimal_settings',
+        f'{dataset_name}_seed{seed}_{method}.yaml'
+    )
+    if args.skip_m and os.path.exists(threshold_path_check):
+        print(f"\n[1/2] Skipping M search — using existing {threshold_path_check}")
+    else:
+        if args.skip_m:
+            print(f"\n[1/2] --skip_m requested but no existing file found; running M search...")
+        else:
+            print(f"\n[1/2] Finding optimal M for '{dataset_name}'...")
+        run_script(threshold_script, common_args)
 
     # Step 2: Find optimal LR (optional)
     lr_data = None
@@ -191,6 +201,8 @@ def main():
                         help='Inducing point method (default: train)')
     parser.add_argument('--skip_lr', action='store_true',
                         help='Skip the LR search step')
+    parser.add_argument('--skip_m', action='store_true',
+                        help='Skip the M search step and reuse existing optimal_settings file')
     args = parser.parse_args()
 
     datasets_config = load_datasets_config()
@@ -204,7 +216,7 @@ def main():
             datasets_to_run.append((name, task, entry))
 
     print(f"Pipeline: {[d[0] for d in datasets_to_run]}")
-    print(f"Method: {args.method}, Skip LR: {args.skip_lr}")
+    print(f"Method: {args.method}, Skip M: {args.skip_m}, Skip LR: {args.skip_lr}")
 
     failed = []
     for dataset_name, task, entry in datasets_to_run:
