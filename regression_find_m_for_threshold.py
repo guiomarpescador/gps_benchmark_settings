@@ -124,7 +124,7 @@ def run_exact_gpr(X_train, y_train, X_test, y_test):
     model = gpflow.models.GPR(data=(X_train, y_train), kernel=kernel, mean_function=None)
     
     opt = gpflow.optimizers.Scipy()
-    opt.minimize(model.training_loss, model.trainable_variables, options=dict(maxiter=1000))
+    opt.minimize(model.training_loss, model.trainable_variables)
     
     # Evaluate
     f_mean, f_var = model.predict_f(X_test)
@@ -148,7 +148,7 @@ def run_sgpr(X_train, y_train, X_test, y_test, M):
     model = gpflow.models.SGPR(data=(X_train, y_train), kernel=kernel, inducing_variable=Z)
     
     opt = gpflow.optimizers.Scipy()
-    opt.minimize(model.training_loss, model.trainable_variables, options=dict(maxiter=1000))
+    opt.minimize(model.training_loss, model.trainable_variables)
     
     # Evaluate
     f_mean, f_var = model.predict_f(X_test)
@@ -190,7 +190,7 @@ def run_sgpr_greedy(X_train, y_train, X_test, y_test, M):
     gpflow.set_trainable(model.inducing_variable, False)
 
     opt = gpflow.optimizers.Scipy()
-    opt.minimize(model.training_loss, model.trainable_variables, options=dict(maxiter=1000))
+    opt.minimize(model.training_loss, model.trainable_variables)
 
     f_mean, f_var = model.predict_f(X_test)
     rmse = np.sqrt(np.mean((f_mean - y_test) ** 2))
@@ -201,6 +201,7 @@ def run_sgpr_greedy(X_train, y_train, X_test, y_test, M):
 def run_fold_regression(X_train, y_train, X_test, y_test, dataset_name, method,
                         threshold_pct_rmse, threshold_pct_nlpd, grids_config):
     N = X_train.shape[0]
+    first_candidate = None
 
     # Trivial metrics
     y_pred_trivial = np.full(y_test.shape, np.mean(y_train))
@@ -222,6 +223,8 @@ def run_fold_regression(X_train, y_train, X_test, y_test, dataset_name, method,
     # Tune M
     print("\nTuning M for SGPR...")
     m_candidates = resolve_m_candidates(dataset_name, N, grids_config)
+    if m_candidates:
+        first_candidate = m_candidates[0]
     run_fn = run_sgpr_greedy if method == 'greedy' else run_sgpr
 
     found_m_rmse = None
@@ -240,6 +243,18 @@ def run_fold_regression(X_train, y_train, X_test, y_test, dataset_name, method,
         if found_m_rmse is not None and found_m_nlpd is not None:
             break
         prev_m = M
+
+    # If both thresholds are met at the first candidate, keep that value and skip refinement.
+    if first_candidate is not None and found_m_rmse == first_candidate and found_m_nlpd == first_candidate:
+        print(f"Both thresholds met at first candidate M={first_candidate}; skipping refinement.")
+        return {
+            'n_train': int(N),
+            'n_test': int(X_test.shape[0]),
+            'trivial': {'rmse': float(rmse_trivial), 'nlpd': float(nlpd_trivial)},
+            'exact_gpr': {'rmse': float(rmse_exact), 'nlpd': float(nlpd_exact)},
+            'thresholds': {'rmse': float(rmse_threshold), 'nlpd': float(nlpd_threshold)},
+            'optimal_m': {'rmse': found_m_rmse, 'nlpd': found_m_nlpd},
+        }
 
     # Refinement
     coarse_m = max(found_m_rmse or 0, found_m_nlpd or 0)

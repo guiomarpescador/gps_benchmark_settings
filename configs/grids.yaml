@@ -1,24 +1,33 @@
 M_candidates:
-  concrete: {start: 50, stop: 500, increment: 50}
-  airfoil: {start: 50, stop: 1000, increment: 50}
+  # seed0 optima: greedy=284, train=154 → start at 100
+  concrete: {start: 100, stop: 450, increment: 50}
+  # seed0 optima: greedy=703, train=552 → grid 350-900
+  airfoil: {start: 350, stop: 900, increment: 50}
+  # seed0 optima: greedy=351, train=21 (train likely artefact) → cover 100-500
+  elevators: {start: 800, stop: 1000, increment: 50}
+  # seed0 optima: greedy=297, train=213 → grid 100-425
+  diabetes: {start: 50, stop: 300, increment: 50}
+  # no seed0 data — keep broad grids
   skillcraft: {start: 50, stop: 1000, increment: 50}
   kin8nm: {start: 50, stop: 800, increment: 50}
   naval: {start: 50, stop: 1000, increment: 50}
   pol: {start: 50, stop: 1000, increment: 50}
-  elevators: {start: 350, stop: 2000, increment: 50}
   bike: {start: 50, stop: 2000, increment: 50}
   protein: {start: 100, stop: 5000, increment: 100}
   kin40k: {start: 100, stop: 5000, increment: 100}
   keggdirected: {start: 100, stop: 5000, increment: 100}
   keggundirected: {start: 100, stop: 5000, increment: 100}
   tamielectric: {start: 100, stop: 5000, increment: 100}
-  diabetes: {start: 50, stop: 500, increment: 50}
-  MNIST: {start: 50, stop: 5000, increment: 50}
+  MNIST: {start: 700, stop: 900, increment: 10}
 
 LR_candidates:
-  concrete: {start: 0.001, stop: 0.01, increment: 0.001}
-  airfoil: {start: 0.001, stop: 0.01, increment: 0.001}
-  elevators: {start: 0.001, stop: 0.01, increment: 0.001}
+  # concrete: best metric at LR=0.001 (edge of old grid) — extend downward
+  concrete: {start: 0.0001, stop: 0.002, increment: 0.0001}
+  # airfoil: best at LR~0.002 but large gap to threshold — try smaller LRs for better convergence
+  airfoil: {start: 0.0002, stop: 0.004, increment: 0.0002}
+  # elevators: LR=0.001 and 0.002 both meet threshold — narrow grid
+  elevators: {start: 0.0005, stop: 0.0025, increment: 0.0005}
   protein: {start: 0.001, stop: 0.01, increment: 0.001}
-  diabetes: {start: 0.001, stop: 0.01, increment: 0.001}
-  MNIST: {start: 0.0001, stop: 0.01, increment: 0.001}
+  # diabetes: best at LR=0.004-0.005, just below threshold — finer resolution in that region
+  diabetes: {start: 0.002, stop: 0.008, increment: 0.0005}
+  MNIST: {start: 0.0005, stop: 0.005, increment: 0.0005}
